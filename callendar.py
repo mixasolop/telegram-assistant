@@ -57,7 +57,8 @@ def _normalize_iso(dt_str: str) -> datetime:
     return dt
 
 
-def list_events(max_results: int = 10) -> list[dict[str, Any]]:
+
+def list_events(max_results: int = 10, date: datetime = datetime.now(timezone.utc)) -> list[dict[str, Any]]:
     service = get_calendar_service()
     calendar_id = _env("GOOGLE_CALENDAR_ID", "primary")
     now = datetime.now(timezone.utc).isoformat()
@@ -79,16 +80,32 @@ def _name_score(query: str, candidate: str) -> float:
     return SequenceMatcher(None, query.lower().strip(), candidate.lower().strip()).ratio()
 
 
-def find_events_by_name(name: str, max_results: int = 20) -> list[dict[str, Any]]:
+def _day_range(date: datetime) -> tuple[str, str]:
+    if date.tzinfo is None:
+        date = date.replace(tzinfo=timezone.utc)
+    start = date.replace(hour=0, minute=0, second=0, microsecond=0)
+    end = start + timedelta(days=1)
+    return start.isoformat(), end.isoformat()
+
+
+def find_events_by_name(
+    name: str,
+    max_results: int = 20,
+    date: datetime | None = None,
+) -> list[dict[str, Any]]:
     service = get_calendar_service()
     calendar_id = _env("GOOGLE_CALENDAR_ID", "primary")
-    now = datetime.now(timezone.utc).isoformat()
+    time_min = datetime.now(timezone.utc).isoformat()
+    time_max = None
+    if date is not None:
+        time_min, time_max = _day_range(date)
     result = (
         service.events()
         .list(
             calendarId=calendar_id,
             q=name,
-            timeMin=now,
+            timeMin=time_min,
+            timeMax=time_max,
             maxResults=max_results,
             singleEvents=True,
             orderBy="startTime",
@@ -103,8 +120,12 @@ def find_events_by_name(name: str, max_results: int = 20) -> list[dict[str, Any]
     )
 
 
-def find_best_event_id_by_name(name: str, min_score: float = 0.45) -> str | None:
-    matches = find_events_by_name(name=name, max_results=20)
+def find_best_event_id_by_name(
+    name: str,
+    min_score: float = 0.45,
+    date: datetime | None = None,
+) -> str | None:
+    matches = find_events_by_name(name=name, max_results=20, date=date)
     if not matches:
         return None
     best = matches[0]
@@ -205,12 +226,19 @@ def update_event_by_name(
     )
 
 
-def delete_event_by_name(event_name: str) -> str:
-    event_id = find_best_event_id_by_name(event_name)
+
+def delete_event_by_name(
+    event_name: str,
+    date: datetime | None = None,
+    time: datetime | None = None,
+) -> str:
+    target_date = date if date is not None else time
+    event_id = find_best_event_id_by_name(event_name, date=target_date)
     if not event_id:
         raise ValueError(f"No matching event found for name: {event_name}")
     delete_event(event_id)
     return event_id
+
 
 
 if __name__ == "__main__":

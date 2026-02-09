@@ -120,10 +120,10 @@ f"todays date is {datetime.datetime.now().strftime('%Y-%m-%dT%H:%M')}"
     print(category)
     if(category == "calendar"):
         print('I AM HERE!')
+        description = parsed_res[2] if len(parsed_res) >= 3 else ""
+        fields = parse_description_fields(description)
+        name = fields.get("name", "")
         if(subcategory == "add"):
-            description = parsed_res[2] if len(parsed_res) >= 3 else ""
-            fields = parse_description_fields(description)
-            name = fields.get("name", "")
             start = fields.get("start", "")
             end = fields.get("end", "")
             descr = fields.get("details", "")
@@ -146,6 +146,25 @@ f"todays date is {datetime.datetime.now().strftime('%Y-%m-%dT%H:%M')}"
                     chat_id=update.effective_chat.id,
                     text=f"Calendar add failed: {exc}",
                 )
+        elif(subcategory == "remove"):
+            if not name:
+                await context.bot.send_message(
+                    chat_id=update.effective_chat.id,
+                    text="Calendar remove failed: missing name.",
+                )
+                return
+            try:
+                event = delete_event_by_name(name)
+                await context.bot.send_message(
+                    chat_id = update.effective_chat.id,
+                    text = event,
+                )
+            except Exception as exc:
+                await context.bot.send_message(
+                    chat_id=update.effective_chat.id,
+                    text=f"Calendar remove failed: {exc}",
+                )
+                
 
 
 async def message_handler(update, context):
